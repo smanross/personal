@@ -83,14 +83,12 @@ def query_sql(conn_string=None, query=None, query_params=None,
     cursor = conn.cursor()
     cursor.set_timeout(query_timeout)  #query timeout
 
-    cursor.autocommit = True  #dont make me run a commit after exery execute
+    #cursor.autocommit = True  #dont make me run a commit after exery execute - doesnt work
 
     if not query_params:
         cursor.execute(query)
     else:
         cursor.execute(query, query_params)
-
-    #cursor.commit()
 
     if cursor.description:
         #some queries return no results, .description will be empty if this is the case
@@ -102,6 +100,8 @@ def query_sql(conn_string=None, query=None, query_params=None,
         #  in every case, however, for testing purposes, we'll let it slide
     else:
         query_results = []
+    
+    cursor.commit()
 
     cursor.close()
 
