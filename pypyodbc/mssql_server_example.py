@@ -3,7 +3,7 @@
     Installing the SQL Server Management Tools (SSMS) on a Windows system might be
         necessary in order to get the "SQL Server" driver installed
 
-        For the example to work, you'd need to create a database called batch_stock_quotes
+        For the example to work, you'd need to create a database called stock_quotes
             and run this code in it (from SSMS), or change the database name in the
             code below
 
