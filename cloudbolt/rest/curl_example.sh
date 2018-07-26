@@ -3,6 +3,7 @@
 export MYUSER="some_user_name"
 export MYPW="blahblah"
 export MYCBIP="my_cloudbolt_ip"
+
 #I already have a file with the json formatted data without newlines
 #  **you can test the "order json file" is suitable with: cat filename | python
 #  -mjson.tool
@@ -11,22 +12,26 @@ export MYCBIP="my_cloudbolt_ip"
 #    then capturing that to a file,·
 #    then removing newlines,·
 #    and transferring the file to my unix server.
-echo "USER = ${MYUSER}"
-echo "PW = ${MYPW}"
 export JSONORDER=`cat json-oneline`
+
 #use the username and pw to get an API token
-curl -k1 -X POST -H "Content-Type: application/json" -d '{"username":"'"$MYUSER"'", "password": "'"$MYPW"'"}' --insecure "https://$MYCBIP/api/v2/api-token-auth/" -o token.txt
+curl -k1 -X POST -H "Content-Type: application/json" -d '{"username":"'"${MYUSER}"'", "password": "'"${MYPW}"'"}' --insecure "https://${MYCBIP}/api/v2/api-token-auth/" -o token.txt
+
 #read the token into $value
 value=($(cat token.txt | python -mjson.tool))
+
 #delete temp file (
 rm -rf token.txt
+
 #unset these vars (not needed anymore)
 unset MYUSER
 unset MYPW
+
 #export the auth token and remove the "s
 export MYTOKEN=${value[2]//\"}
-echo "TOKEN = $MYTOKEN"
-curl -v -X POST -k1  -H "Authorization: Bearer $MYTOKEN" -H "Content-Type:application/json" -d "$JSONORDER" --insecure "https://${MYCBIP}/api/v2/orders/"
+
+#send the order
+curl -v -X POST -k1  -H "Authorization: Bearer ${MYTOKEN}" -H "Content-Type:application/json" -d "${JSONORDER}" --insecure "https://${MYCBIP}/api/v2/orders/"
 
 #unset these vars (not needed anymore)
 unset MYTOKEN
