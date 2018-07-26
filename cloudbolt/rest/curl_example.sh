@@ -3,8 +3,9 @@
 export MYUSER="some_user_name"
 export MYPW="blahblah"
 export MYCBIP="my_cloudbolt_ip"
-#I already have a file with the json formatted without newlines  (you can test the "order json file" is suitable with: cat filename | python -mjson.tool
-#  My file was created by ordering a blueprint
+#I already have a file with the json formatted data without newlines
+#  **you can test the "order json file" is suitable with: cat filename | python -mjson.tool
+#  **My file was created by ordering a blueprint
 #    and then pressing API, 
 #    then capturing that to a file, 
 #    then removing newlines, 
