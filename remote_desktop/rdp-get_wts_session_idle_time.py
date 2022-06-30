@@ -19,7 +19,7 @@ def get_datetime_from_windows_epoch(epoch:int):
         Windows Epoch is 1/1/1601 unlike the Unix Epoch at 1/1/1970
 
         * Never mind the fact that the windows file explorer chokes any time you pass it
-          a date prior to 1970 and it says the file data is blank
+          a date prior to 1970 and it says the file date is blank
         * and we wont mention Excel issues with early dates because it was supposedly built
           to be compatible with Lotus 123 which also had date issues with "early dates"
     '''
