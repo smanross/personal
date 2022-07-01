@@ -340,5 +340,5 @@ def make_new_ovpn_file(cust_name, cert_name, ca_cert='ca.crt', ca_key='ca.key', 
 if __name__ == "__main__":
      # while you dont need the "server" .ovpn file, this will create a server certificate (and the CA if needed, or use the existing CA cert and key)
     make_new_ovpn_file("somecustomer", cert_name='server')
-    make_new_ovpn_file("somecustomer", cert_name='client', extendedKeyUsage=b'client_auth')
+    make_new_ovpn_file("somecustomer", cert_name='client', extendedKeyUsage='client_auth')
     print("Done")
