@@ -45,11 +45,11 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
-cfg = configparser.ConfigParser()
+cfg = configparser.RawConfigParser()
 if exists('openvpn_ca-creator.ini'):
     cfg.read('openvpn_ca-creator.ini')
     # get your preferred path to store all the CA, cert and .ovpn files
-    BASE_PATH = cfg['general']['BASE_PATH']
+    BASE_PATH = os.path.expandvars(cfg['general']['BASE_PATH'])
 else:
     # using expandvars to be able to embed environment variables in path
     BASE_PATH = os.path.expandvars("%USERPROFILE%\\Documents\\Customers")
@@ -273,9 +273,13 @@ def dump_string_to_file(strng, file, write_mode = 'x'):
 def get_next_serial(filename):
     '''
         Get the next serial number
+
+          # this is by no means perfect, and could totally have issues in a race condition but..
+          #   in my testing, I'm the only one making cert request calls, so it's sufficient.
     '''
+
     if not exists(filename):
-        # the CA would be serial 1 and the file doesnt exist, so its likely that its never issued a certificate
+        # the CA would be serial 1 and the file doesn't exist, so its likely that its never issued a certificate
         with open(filename,'x') as f:
             f.write('[ca]\nlast_used_serial_number=2')
         return 2
@@ -288,7 +292,51 @@ def get_next_serial(filename):
             config.write(f, space_around_delimiters=False)
         return next_serial
 
-def make_new_ovpn_file(cust_name, cert_name, ca_cert='ca.crt', ca_key='ca.key', commonoptspath='commonopts.txt', extendedKeyUsage='server_auth', key_size=2048):
+def get_or_create_ca(cafile:str, cakeyfile:str, base_dir, cust_name):
+    '''
+        Get or create the files necessary to track a CA
+    '''
+    if exists(cafile) and exists(cakeyfile):
+        cakey  = retrieve_key_from_file(cakeyfile)
+        cacert = retrieve_cert_from_file(cafile)
+    else:
+        (cacert, cakey) = create_ca(CN=f'{cust_name.capitalize()} CA')
+        dump_string_to_file(dump_file_in_mem(cacert).decode('utf-8'), cafile)
+        dump_string_to_file(dump_file_in_mem(cakey).decode('utf-8'), cakeyfile)
+        if not exists(f'{base_dir}\\certs'):
+            os.makedirs(f'{base_dir}\\certs')
+
+    return (cacert, cakey)
+
+
+def request_certificate_from_ca(cust_name, cert_name, ca_cert='ca.crt', ca_key='ca.key', extendedKeyUsage='server_auth', key_size=2048):
+    '''
+        Generate a new certificate from a CA
+    '''
+    base_dir = f'{BASE_PATH}\\{cust_name}\\openvpn'
+
+    cafile = f'{base_dir}\\{ca_cert}'
+    cakeyfile = f'{base_dir}\\{ca_key}'
+
+    (cacert, cakey) = get_or_create_ca(cafile, cakeyfile, base_dir, cust_name)
+
+    # Generate a new private key pair for a new certificate.
+    key = make_key(key_size)
+
+    # Generate a certificate request
+    csr = make_csr(key, cert_name, extendedKeyUsage=extendedKeyUsage)
+    serial = get_next_serial(f'{base_dir}\\serials.ini')
+
+    # Sign the certificate with the new csr
+    crt = create_certificate_from_csr(csr, cakey, serial, cacert)
+    print(f'created certificate with serial: {serial} and subject: {cert_name}')
+    crtdump = dump_file_in_mem(crt).decode('utf-8')
+    dump_string_to_file(crtdump, f'{base_dir}\\certs\\{serial}-{cert_name}.crt')
+
+    return cacert, crt, key, serial
+
+
+def make_new_ovpn_file(cust_name, cert_name, ca_cert='ca.crt', ca_key='ca.key', commonoptspath='commonopts.txt', extendedKeyUsage='client_auth', key_size=2048):
     '''
         build an ovpn file from the key material
     '''
@@ -305,27 +353,7 @@ def make_new_ovpn_file(cust_name, cert_name, ca_cert='ca.crt', ca_key='ca.key', 
     else:
         common = ""
 
-    cafile = f'{base_dir}\\{ca_cert}'
-    cakeyfile = f'{base_dir}\\{ca_key}'
-
-    if exists(cafile) and exists(cakeyfile):
-        cakey  = retrieve_key_from_file(cakeyfile)
-        cacert = retrieve_cert_from_file(cafile)
-    else:
-        (cacert, cakey) = create_ca(CN=f'{cust_name.capitalize()} CA')
-        dump_string_to_file(dump_file_in_mem(cacert).decode('utf-8'), cafile)
-        dump_string_to_file(dump_file_in_mem(cakey).decode('utf-8'), cakeyfile)
-        if not exists(f'{base_dir}\\certs'):
-            os.makedirs(f'{base_dir}\\certs')
-
-    # Generate a new private key pair for a new certificate.
-    key = make_key(key_size)
-    # Generate a certificate request
-    csr = make_csr(key, cert_name, extendedKeyUsage=extendedKeyUsage)
-    serial = get_next_serial(f'{base_dir}\\serials.ini')
-    # Sign the certificate with the new csr
-    crt = create_certificate_from_csr(csr, cakey, serial, cacert)
-    print(f'created certificate with serial: {serial} and subject: {cert_name}')
+    (cacert, crt, key, serial) = request_certificate_from_ca(cust_name, cert_name, ca_cert=ca_cert, ca_key=ca_key, key_size=key_size, extendedKeyUsage=extendedKeyUsage)
     # Now we have a successfully signed certificate. We must now
     # create a .ovpn file and then dump it somewhere.
     clientkey  = dump_file_in_mem(key).decode('utf-8')
@@ -333,12 +361,11 @@ def make_new_ovpn_file(cust_name, cert_name, ca_cert='ca.crt', ca_key='ca.key', 
     cacertdump = dump_file_in_mem(cacert).decode('utf-8')
     ovpn = f"{common}<ca>\n{cacertdump}</ca>\n<cert>\n{clientcert}</cert>\n<key>\n{clientkey}</key>\n"
 
-    certfile = f'{base_dir}\\certs\\{serial}-{cert_name}.crt'
-    dump_string_to_file(clientcert, certfile)
     dump_string_to_file(ovpn, f'{base_dir}\\{cust_name}-{cert_name}.ovpn', write_mode = 'w')
 
 if __name__ == "__main__":
-     # while you dont need the "server" .ovpn file, this will create a server certificate (and the CA if needed, or use the existing CA cert and key)
-    make_new_ovpn_file("somecustomer", cert_name='server')
-    make_new_ovpn_file("somecustomer", cert_name='client', extendedKeyUsage='client_auth')
+     # this will create a server certificate (and the CA if needed, or use the existing CA cert and key)
+    request_certificate_from_ca("somecustomer", cert_name='server')
+    # and create the .ovpn file and request the client cert from the same CA
+    make_new_ovpn_file("somecustomer", cert_name='client')
     print("Done")
