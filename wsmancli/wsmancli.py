@@ -9,6 +9,7 @@
 
     prerequisites:
         pip install pypsrp
+        pip install xmltodict
 """
 
 from pypsrp.wsman import WSMan, NAMESPACES, SelectorSet
